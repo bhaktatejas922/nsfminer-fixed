@@ -1,0 +1,55 @@
+version: 2.1
+
+commands:
+  restore_cache_cmd:
+    steps:
+      - restore_cache:
+          key: nsfminer-{{ .Environment.CACHE_VERSION }}
+
+
+  save_cache_cmd:
+    steps:
+      - save_cache:
+          paths:
+            - ~/.hunter
+          key: nsfminer-{{ .Environment.CACHE_VERSION }}
+
+  build:
+    steps:
+      - run: ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+      - run: apt update
+      - run: apt -y upgrade
+      - run: apt install -y git cmake mesa-common-dev
+      - checkout
+      - run: git submodule update --init --recursive
+      - restore_cache_cmd
+      - run: cmake -DHUNTER_JOBS_NUMBER=4 -H. -Bbuild
+      - run: cmake --build build -- -j`nproc`
+      - save_cache_cmd
+      - store_artifacts:
+          path: build/nsfminer/nsfminer
+          destination: nsfminer
+          
+  test:
+    steps:
+      - run: ./build/nsfminer/nsfminer --version
+
+executors:
+ docker-executor-u20n11:
+   docker:
+     - image: nvidia/cuda:11.0-devel-ubuntu20.04
+
+jobs:
+  build-with-docker-u20n11:
+    executor: docker-executor-u20n11
+    steps:
+      - build
+      - test
+    environment:
+        TZ: "America/New_York"
+
+workflows:
+  build-with-docker:
+    jobs:
+      - build-with-docker-u20n11
+
